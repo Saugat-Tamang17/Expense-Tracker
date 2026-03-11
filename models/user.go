@@ -1,4 +1,4 @@
-package users
+package models
 
 import (
 	"ExpenseTracker/config"
@@ -8,7 +8,7 @@ type User struct {
 	Id       int    `json:"id"`
 	Username string `json:"username"`
 	Email    string `json:"email"`
-	Password string `json:"password"`
+	Password string `json:"-"`
 }
 
 func CreateUser(username, email, hashedPassword string) error {

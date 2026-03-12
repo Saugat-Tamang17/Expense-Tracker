@@ -1,194 +1,72 @@
-# 💸 Expense Tracker API
+# middleware/auth.go
 
-A RESTful API built with **Go** and **PostgreSQL** for tracking personal expenses. Features JWT authentication, bcrypt password hashing, and a clean, modular project structure.
+## Overview
 
----
-
-## 🗂️ Project Structure
-
-```
-ExpenseTracker/
-├── config/
-│   └── db.go           # PostgreSQL connection setup
-├── handlers/
-│   ├── auth.go         # Register & Login handlers
-│   └── expense.go      # CRUD handlers for expenses
-├── middleware/
-│   └── auth.go         # JWT authentication middleware
-├── models/
-│   ├── user.go         # User struct & DB queries
-│   └── expense.go      # Expense struct & DB queries
-├── router/
-│   └── router.go       # Route definitions
-├── .env                # Environment variables (not committed)
-├── .gitignore
-├── go.mod
-├── go.sum
-└── main.go             # Entry point
-```
+This file contains the JWT authentication middleware for the Expense Tracker API. It intercepts all protected routes and verifies the client's token before allowing the request to reach the actual handler.
 
 ---
 
-## ⚙️ Tech Stack
+## How It Works
 
-| Technology | Purpose |
-|---|---|
-| Go (net/http) | REST API server |
-| PostgreSQL | Database |
-| JWT (golang-jwt/jwt) | Authentication |
-| bcrypt | Password hashing |
-| godotenv | Environment variable loading |
+**1. Extract the token**
 
----
+The middleware reads the `Authorization` header from the incoming HTTP request. If the header is missing, the request is rejected immediately with a `401 Unauthorized` response.
 
-## 🚀 Getting Started
+**2. Trim the Bearer prefix**
 
-### Prerequisites
-- Go 1.21+
-- PostgreSQL
+Tokens arrive in the format `Bearer <token>`. The `Bearer` prefix is a standard HTTP convention and not part of the actual JWT, so it is stripped before validation.
 
-### 1. Clone the repository
-```bash
-git clone https://github.com/Saugat-Tamang17/ExpenseTracker.git
-cd ExpenseTracker
-```
+**3. Validate the token**
 
-### 2. Install dependencies
-```bash
-go get github.com/lib/pq
-go get github.com/golang-jwt/jwt/v5
-go get github.com/joho/godotenv
-go get golang.org/x/crypto/bcrypt
-```
+The raw token string is parsed and verified against the `JWT_SECRET` from the environment variables. If the token has been tampered with, has expired, or is invalid for any reason, the request is rejected.
 
-### 3. Setup PostgreSQL
-```sql
-CREATE DATABASE expensetracker;
+**4. Extract the user ID**
 
-\c expensetracker
+Once the token is confirmed valid, the `user_id` claim is extracted from the token's payload (claims).
 
-CREATE TABLE users (
-    id SERIAL PRIMARY KEY,
-    username VARCHAR(100) UNIQUE NOT NULL,
-    email VARCHAR(150) UNIQUE NOT NULL,
-    password TEXT NOT NULL,
-    created_at TIMESTAMP DEFAULT NOW()
-);
+**5. Pass via context**
 
-CREATE TABLE expenses (
-    id SERIAL PRIMARY KEY,
-    user_id INT REFERENCES users(id) ON DELETE CASCADE,
-    title VARCHAR(200) NOT NULL,
-    amount NUMERIC(10, 2) NOT NULL,
-    category VARCHAR(100),
-    note TEXT,
-    date DATE DEFAULT CURRENT_DATE,
-    created_at TIMESTAMP DEFAULT NOW()
-);
-```
+Since Go's HTTP handler functions have a fixed signature `(w http.ResponseWriter, r *http.Request)`, extra data cannot be passed as parameters. Instead, the `user_id` is stored inside the request context using `context.WithValue`, acting as a bag that travels with the request to the next handler.
 
-### 4. Create your `.env` file
-```env
-DB_URL=postgres://postgres:yourpassword@localhost:5432/expensetracker?sslmode=disable
-JWT_SECRET=your_super_secret_key
-PORT=9090
-```
+**6. Call the next handler**
 
-### 5. Run the server
-```bash
-go run main.go
-```
-
-Server will start at `http://localhost:9090` ✅
+The request is forwarded to the intended handler with the updated context attached via `r.WithContext(ctx)`.
 
 ---
 
-## 📡 API Endpoints
+## Request Flow
 
-### Auth (Public)
-
-| Method | Endpoint | Description |
-|---|---|---|
-| POST | `/register` | Register a new user |
-| POST | `/login` | Login and receive JWT token |
-
-#### Register
-```json
-POST /register
-{
-  "username": "saugat",
-  "email": "saugat@example.com",
-  "password": "yourpassword"
-}
 ```
-
-#### Login
-```json
-POST /login
-{
-  "email": "saugat@example.com",
-  "password": "yourpassword"
-}
-```
-Returns:
-```json
-{
-  "token": "eyJhbGciOiJIUzI1NiIs..."
-}
+Incoming Request
+    -> AuthMiddleware
+        -> Check Authorization header
+        -> Strip "Bearer" prefix
+        -> Validate JWT against JWT_SECRET
+        -> Extract user_id from claims
+        -> Store user_id in context
+        -> Forward to ExpenseHandler
 ```
 
 ---
 
-### Expenses (Protected)
-> All expense routes require the JWT token in the Authorization header:
-> `Authorization: Bearer <your_token>`
+## Usage
 
-| Method | Endpoint | Description |
-|---|---|---|
-| GET | `/expenses` | Get all expenses for logged in user |
-| POST | `/expenses` | Create a new expense |
-| PUT | `/expenses/:id` | Update an expense |
-| DELETE | `/expenses/:id` | Delete an expense |
+In `router/router.go`, protected routes are wrapped with this middleware:
 
-#### Create Expense
-```json
-POST /expenses
-{
-  "title": "Grocery",
-  "amount": 45.50,
-  "category": "Food",
-  "note": "Weekly groceries",
-  "date": "2026-03-12T00:00:00Z"
-}
+```go
+mux.Handle("/expenses", middleware.AuthMiddleware(http.HandlerFunc(handlers.ExpenseHandler)))
+```
+
+In `handlers/expense.go`, the user_id is retrieved from context:
+
+```go
+userID := int(r.Context().Value("userID").(float64))
 ```
 
 ---
 
-## 🔐 Authentication Flow
+## Notes
 
-1. Register or Login to receive a JWT token
-2. Include the token in all protected requests as:
-   ```
-   Authorization: Bearer <token>
-   ```
-3. Token expires after **24 hours**
-
----
-
-## 🧱 Architecture
-
-The project follows a clean separation of concerns:
-
-- **`config/`** — Initializes and exposes the DB connection
-- **`models/`** — All SQL queries and data structs live here, handlers never write raw SQL
-- **`handlers/`** — Reads HTTP requests, calls models, returns JSON responses
-- **`middleware/`** — Intercepts protected routes and verifies JWT before the handler runs
-- **`router/`** — Single source of truth for all routes and which ones are protected
-
----
-
-## 👤 Author
-
-**Saugat Tamang**
-- GitHub: [@Saugat-Tamang17](https://github.com/Saugat-Tamang17)
-- Student ID: 024BSCIT036
+- The JWT validation block is standard boilerplate from the `golang-jwt/jwt` library and remains consistent across all token verification calls.
+- The `JWT_SECRET` is loaded from the `.env` file via `os.Getenv` and never hardcoded.
+- Context should only be used for request-scoped data such as user identity. It is not a substitute for proper function parameters in business logic.

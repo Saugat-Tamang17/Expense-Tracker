@@ -25,4 +25,10 @@ func NewDB() *sql.DB {
 		log.Fatalf("failed to open DB: %v", err)
 	}
 
+	if err := db.Ping(); err != nil {
+		log.Fatalf("failed to connect to the db : %v", err)
+	}
+
+	log.Println("Database connected successfully")
+	return db
 }

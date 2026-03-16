@@ -25,6 +25,7 @@ func NewDB() *sql.DB {
 		log.Fatalf("failed to open DB: %v", err)
 	}
 
+	//if error has happened here , that means the database is offline or the connection lost heheh//
 	if err := db.Ping(); err != nil {
 		log.Fatalf("failed to connect to the db : %v", err)
 	}

@@ -11,8 +11,8 @@ mux:=http.NewServeMux()
 
 
 //authorization routes are supposed to be made public
-mux.HandleFunc(("/register",handlers.Registers))
-mux.HandleFunc("/login",handlers.login)
+mux.HandleFunc(("/Register",handlers.Registers))
+mux.HandleFunc("/Login",handlers.login)
 
 
 //expenses routes are supposed to be protected brochacho//
